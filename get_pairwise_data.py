@@ -3,9 +3,9 @@ from receipts import write_receipt
 
 auctions = {}
 
-bidsdict = csv.DictReader(open('data/auctions.csv'))
+bidsdict = csv.DictReader(open("data/auctions.csv"))
 for bid in bidsdict:
-    auction_num = bid['auction_id']
+    auction_num = bid["auction_id"]
     if not auction_num in auctions:
         auctions[auction_num] = []
     auctions[auction_num].append(bid)
@@ -24,20 +24,22 @@ for auction_num in auctions:
     last_bid = None
     last_bids_by_id = {}
     for bid in auctions[auction_num]:
-        sender = bid['sender']
+        sender = bid["sender"]
         if not sender in auctions_participated:
             auctions_participated[sender] = set()
         auctions_participated[sender].add(auction_num)
-        bid['gas_price'] = int(bid['gas_price'])
-        bid['time_seen'] = int(bid['time_seen'])
-        if last_bid is not None and last_bid['gas_price'] != 0:
-            counterbidder = last_bid['sender']
-            price_delta = bid['gas_price'] - last_bid['gas_price']
-            price_percent_delta = (price_delta / (float(bid['gas_price'] + last_bid['gas_price'])/2)) * 100
-            time_delta = (bid['time_seen'] - last_bid['time_seen']) / (10 ** 9)
-            price_delta /=(10 ** 9)
+        bid["gas_price"] = int(bid["gas_price"])
+        bid["time_seen"] = int(bid["time_seen"])
+        if last_bid is not None and last_bid["gas_price"] != 0:
+            counterbidder = last_bid["sender"]
+            price_delta = bid["gas_price"] - last_bid["gas_price"]
+            price_percent_delta = (
+                price_delta / (float(bid["gas_price"] + last_bid["gas_price"]) / 2)
+            ) * 100
+            time_delta = (bid["time_seen"] - last_bid["time_seen"]) / (10 ** 9)
+            price_delta /= 10 ** 9
             if price_delta < 0:
-                continue # ignore bids that aren't raises; TODO check effects
+                continue  # ignore bids that aren't raises; TODO check effects
             bidder_pairs = str(sender) + "-" + str(counterbidder)
             if not bidder_pairs in pairwise_price_deltas:
                 pairwise_price_deltas[bidder_pairs] = []
@@ -49,12 +51,14 @@ for auction_num in auctions:
             pairwise_price_percent_deltas[bidder_pairs].append(price_percent_delta)
             pairs[sender].add(bidder_pairs)
 
-        if sender in last_bids_by_id and last_bids_by_id[sender]['gas_price'] != 0:
+        if sender in last_bids_by_id and last_bids_by_id[sender]["gas_price"] != 0:
             last_self_bid = last_bids_by_id[sender]
-            price_delta = bid['gas_price'] - last_self_bid['gas_price']
-            time_delta = (bid['time_seen'] - last_self_bid['time_seen']) / (10 ** 9)
-            price_percent_delta = (price_delta / ((bid['gas_price'] + last_self_bid['gas_price'])/2)) * 100
-            price_delta /=(10 ** 9)
+            price_delta = bid["gas_price"] - last_self_bid["gas_price"]
+            time_delta = (bid["time_seen"] - last_self_bid["time_seen"]) / (10 ** 9)
+            price_percent_delta = (
+                price_delta / ((bid["gas_price"] + last_self_bid["gas_price"]) / 2)
+            ) * 100
+            price_delta /= 10 ** 9
             if not sender in self_price_deltas:
                 self_time_deltas[sender] = []
                 self_price_deltas[sender] = []
@@ -74,7 +78,15 @@ for sender in auctions_participated:
 
 print(pairs)
 
-data = {"pairwise_time": pairwise_time_deltas, "pairwise_price": pairwise_price_deltas,"pairwise_price_percent": pairwise_price_percent_deltas,"self_time": self_time_deltas,"self_price": self_price_deltas, "self_price_percent": self_price_deltas, "pairs": pairs, "auctions": auctions_participated}
-f = open('data/pairwise_self.csv', 'w')
+data = {
+    "pairwise_time": pairwise_time_deltas,
+    "pairwise_price": pairwise_price_deltas,
+    "pairwise_price_percent": pairwise_price_percent_deltas,
+    "self_time": self_time_deltas,
+    "self_price": self_price_deltas,
+    "self_price_percent": self_price_deltas,
+    "pairs": pairs,
+    "auctions": auctions_participated,
+}
+f = open("data/pairwise_self.csv", "w")
 f.write(json.dumps(data))
-

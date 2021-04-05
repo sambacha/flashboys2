@@ -3,9 +3,11 @@ import csv, csv_hack, sys
 infile = sys.argv[1]
 outfile = sys.argv[2]
 
+
 def init_zero_dict(dict, val):
     if not val in dict:
         dict[val] = 0
+
 
 total_gwei_bid = {}
 total_gwei_used = {}
@@ -17,13 +19,13 @@ num_txs = 0
 
 bidsdict = csv.DictReader(open(infile))
 for bid in bidsdict:
-    if len(bid['input']) < 8:
+    if len(bid["input"]) < 8:
         continue
     num_txs += 1
-    blocknum = int(bid['block_number'])
-    price_bid = int(bid['gas_price'])
-    gas_bid = int(bid['gas'])
-    gas_used = int(bid['receipt_gas_used'])
+    blocknum = int(bid["block_number"])
+    price_bid = int(bid["gas_price"])
+    gas_bid = int(bid["gas"])
+    gas_used = int(bid["receipt_gas_used"])
     init_zero_dict(total_gwei_bid, blocknum)
     init_zero_dict(total_gwei_used, blocknum)
     init_zero_dict(total_gas_bid, blocknum)
@@ -41,7 +43,9 @@ print("Total gas bid", sum(total_gas_bid.values()))
 
 blockstats = [0, 0]
 data = []
-for blocknum in range(min(total_gwei_bid.keys()), max(total_gwei_bid.keys()) + 1, BINWIDTH):
+for blocknum in range(
+    min(total_gwei_bid.keys()), max(total_gwei_bid.keys()) + 1, BINWIDTH
+):
     start = blocknum
     end = min(blocknum + BINWIDTH, max(total_gwei_bid.keys()) + 1)
     total_gwei_bid_range = 0
@@ -58,10 +62,17 @@ for blocknum in range(min(total_gwei_bid.keys()), max(total_gwei_bid.keys()) + 1
         else:
             blockstats[1] += 1
 
-    data.append([start, end, total_gwei_bid_range, total_gwei_used_range, total_gas_bid_range, total_gas_used_range])
+    data.append(
+        [
+            start,
+            end,
+            total_gwei_bid_range,
+            total_gwei_used_range,
+            total_gas_bid_range,
+            total_gas_used_range,
+        ]
+    )
 
 print("Yes/no", blockstats)
 
-open(outfile, 'w').write(str(data))
-
-
+open(outfile, "w").write(str(data))
