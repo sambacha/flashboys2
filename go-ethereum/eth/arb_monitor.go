@@ -2,16 +2,15 @@ package eth
 
 import (
 	"database/sql"
+	_ "github.com/lib/pq"
 	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/CircularBufferQueue"
-	"github.com/ethereum/go-ethereum/eth/MonitorListGetter"
 	"github.com/ethereum/go-ethereum/log"
-	_ "github.com/lib/pq"
 	"io/ioutil"
-	"os"
+	//"os"
 	"strings"
 	"unicode"
 	"math/big"
@@ -21,6 +20,7 @@ var ArbDB *sql.DB
 
 var txCache CircularBufferQueue.FIFOTransactionQueue
 var txCachePtr = &txCache
+var monitoredAddressesMap = make(map[string]bool)
 
 func InitTxCache() {
 	txCachePtr.New()
@@ -28,24 +28,60 @@ func InitTxCache() {
 
 func InitArbDB() {
 	var err error
-	homepath := os.Getenv("HOME")
-	var connStrBuilder strings.Builder
-	connStrBuilder.WriteString("user=flashboys2 password='lolsosecure' host='some.random.domain.us-west-2.rds.amazonaws.com' dbname=arbitrage sslmode=verify-ca sslrootcert=")
-	connStrBuilder.WriteString(homepath)
-	connStrBuilder.WriteString("/.postgresql/root.crt")
-	ArbDB, err = sql.Open("postgres", connStrBuilder.String())
+	// connStr := "postgres://tkell%3Ad8HqKH%3B2~%3E~%3D@arbitrage1.cfcehtuqrfjr.us-east-2.rds.amazonaws.com/arbitrage?sslmode=verify-full"
+	//homepath := os.Getenv("HOME")
+	//var connStrBuilder strings.Builder
+    // connStrBuilder.WriteString("user=tkell password='lol' host='127.0.0.1' dbname=arbitrage sslmode=verify-ca sslrootcert=")
+	// connStrBuilder.WriteString(homepath)
+	// connStrBuilder.WriteString("/.postgresql/root.crt")
+	//ArbDB, err = sql.Open("postgres", connStrBuilder.String())
+    ArbDB, err = sql.Open("postgres", "user=tkell password='lol' host='127.0.0.1' dbname=postgres") //connStrBuilder.String())
 	if err != nil {
-		log.Error(fmt.Sprintf("flashboys2 failed to connect to database: %s", err))
+		log.Error(fmt.Sprintf("relyt failed to connect to database: %s", err))
 
 	}
 	ArbDB.SetMaxOpenConns(15)
 	err = ArbDB.Ping()
 
 	if err != nil {
-		log.Error(fmt.Sprintf("flashboys2 couldn't establish ping with the db: %s", err))
+		log.Error(fmt.Sprintf("relyt couldn't establish ping with the db: %s", err))
 	} else {
 		log.Info("DB connected successfully for initial ping.")
 	}
+    populateMonitoredAddressesMap()
+}
+
+func populateMonitoredAddressesMap() {
+    var address string
+    dbQuery := `SELECT address FROM perpetrators;`
+    rows, err := ArbDB.Query(dbQuery)
+    if err != nil {
+        errmsg := fmt.Sprintf("relyt failed reading addresses to monitor: %s", err)
+        log.Crit(errmsg)
+    }
+    defer rows.Close()
+    for rows.Next() {
+        err := rows.Scan(&address)
+        if err != nil {
+            errmsg := fmt.Sprintf("relyt failed to scan row populating monitered addresses: %s", err)
+            log.Crit(errmsg)
+        }
+        log.Info(fmt.Sprintf("relyt loading address to monitor: %s", address))
+        monitoredAddressesMap[strings.ToLower(address)] = false
+    }
+    err = rows.Err()
+    if err != nil {
+        log.Crit(fmt.Sprintf("Some strange error after loading addresses %s", err))
+    }
+}
+
+func updatePerpetratorsList(fromString string) {
+    dbQuery := `INSERT INTO perpetrators(address) VALUES($1);`
+    _, err := ArbDB.Exec(dbQuery, fromString)
+    if err != nil {
+        errmsg := fmt.Sprintf("relyt failed to push data to the database: address %s %s", fromString, err)
+        log.Error(errmsg)
+    }
 }
 
 func RemoveWhiteSpaceMap(str string) string {
@@ -66,11 +102,12 @@ func PullIPFromFile() (string, error) {
 }
 
 func SendLog(tx *types.Transaction, p *peer, pm *ProtocolManager, timeString string) {
-	tempSigner := types.NewEIP155Signer(pm.chainconfig.ChainID)
+	tempSigner := types.NewEIP155Signer(pm.blockchain.Config().ChainID)
 	txSender, cryingerr := types.Sender(tempSigner, tx)
 	var fromString, recipString, peerString, peerNameString, ipString string
 	fromString = txSender.String()
-	_, found := MonitorListGetter.MonitoredAddressesMap[strings.ToLower(fromString)] //  monitoredAddressesMap[strings.ToLower(fromString)]
+	//_, found := MonitorListGetter.MonitoredAddressesMap[strings.ToLower(fromString)] //  monitoredAddressesMap[strings.ToLower(fromString)]
+	_, found := monitoredAddressesMap[strings.ToLower(fromString)]
 	ipString = p.RemoteAddr().String()
 	ipList := strings.Split(ipString, ":")
 	ipStringSplit, ipPort := ipList[0], ipList[1]
@@ -125,18 +162,20 @@ func SendLog(tx *types.Transaction, p *peer, pm *ProtocolManager, timeString str
 				txCachePtr.Queue[counter].TxRString != txRString &&
 				tx.GasPrice().Cmp(gasPriceFloorPtr) == 1 {
 
-				log.Info(fmt.Sprintf("flashboys2 new gas replacement event found: %s and %s have the same sender and Nonce, Sender is %s, recipient is %s, and gas price is %d", txHash, txCachePtr.Queue[counter].TxHash, fromString, recipString, gprice))
+				log.Info(fmt.Sprintf("relyt new gas replacement event found: %s and %s have the same sender and Nonce, Sender is %s, recipient is %s, and gas price is %d", txHash, txCachePtr.Queue[counter].TxHash, fromString, recipString, gprice))
 				found = true
-				MonitorListGetter.SendAddressToMonitor(fromString)
-				MonitorListGetter.MonitoredAddressesMap[strings.ToLower(fromString)]  = false
+				//MonitorListGetter.SendAddressToMonitor(fromString)
+				//MonitorListGetter.MonitoredAddressesMap[strings.ToLower(fromString)]  = false
+                updatePerpetratorsList(fromString)
+                monitoredAddressesMap[strings.ToLower(fromString)] = false
 			}
 			if found == true && txCachePtr.Queue[counter].TxHash == txHash {
-				log.Info(fmt.Sprintf("flashboys2 duplicate TX: %s", txHash))
+				log.Info(fmt.Sprintf("relyt duplicate TX: %s", txHash))
 				duplicateHash = true
 			}
 		}
 	} else {
-		errmsg := fmt.Sprintf("flashboys2 failed to make an int for gasprice")
+		errmsg := fmt.Sprintf("relyt failed to make an int for gasprice")
 		log.Error(errmsg)
 	}
 	txCachePtr.Insert(txStringStruct)
@@ -145,7 +184,7 @@ func SendLog(tx *types.Transaction, p *peer, pm *ProtocolManager, timeString str
 		if cryingerr == nil && ipErr == nil {
 			if !duplicateHash {
 				debugOutput := fmt.Sprintf(
-					"flashboys2 my ip: %s time: %s | from: %s | to: %s | %s | Peer Name: %s | IP: %s | Port: %s | Nonce: %d | GasPrice: %s | GasLimit: %d | Value: %d | EC_V: %d | EC_R: %d | EC_S %d | Hash: %s | Payload: %s",
+					"relyt my ip: %s time: %s | from: %s | to: %s | %s | Peer Name: %s | IP: %s | Port: %s | Nonce: %d | GasPrice: %s | GasLimit: %d | Value: %d | EC_V: %d | EC_R: %d | EC_S %d | Hash: %s | Payload: %s",
 					myIP, timeString, fromString, recipString, peerString, peerNameString, ipStringSplit, ipPort, txNonce, gprice, glimit, txAmount, txV, txR, txS, txHash, txPayload)
 				log.Info(debugOutput)
 
@@ -154,20 +193,20 @@ func SendLog(tx *types.Transaction, p *peer, pm *ProtocolManager, timeString str
 				_, err := ArbDB.Exec(dbQuery,
 					myIP, fromString, recipString, peerString, peerNameString, ipStringSplit, ipPort, timeString, txNonce, gprice, glimit, txAmount, txPayload, txVString, txRString, txSString, txHash)
 				if err != nil {
-					errmsg := fmt.Sprintf("flashboys2 failed to push data to the database: %s", err)
+					errmsg := fmt.Sprintf("relyt failed to push data to the database: %s", err)
 					log.Error(errmsg)
 				}
 			} else {
 				debugOutput := fmt.Sprintf(
-					"flashboys2 duplicate hash: %s time: %s | from: %s | to: %s | %s | Peer Name: %s | IP: %s | Port: %s | Nonce: %d | GasPrice: %s | GasLimit: %d | Value: %d | EC_V: %d | EC_R: %d | EC_S %d | Hash: %s | Payload: %s",
+					"relyt duplicate hash: %s time: %s | from: %s | to: %s | %s | Peer Name: %s | IP: %s | Port: %s | Nonce: %d | GasPrice: %s | GasLimit: %d | Value: %d | EC_V: %d | EC_R: %d | EC_S %d | Hash: %s | Payload: %s",
 					myIP, timeString, fromString, recipString, peerString, peerNameString, ipStringSplit, ipPort, txNonce, gprice, glimit, txAmount, txV, txR, txS, txHash, txPayload)
 				log.Info(debugOutput)
-				dbQuery := `INSERT INTO arbitrage(monitor_ip, ip_addr, time_seen, hash) 
+				dbQuery := `INSERT INTO arbitrage(monitor_ip, ip_addr, time_seen, hash)
 				   VALUES($1,$2,$3,$4) RETURNING time_seen;`
 				_, err := ArbDB.Exec(dbQuery,
 					myIP, ipStringSplit, timeString, txHash)
 				if err != nil {
-					errmsg := fmt.Sprintf("flashboys2 failed to push duplicate TX to the database: %s", err)
+					errmsg := fmt.Sprintf("relyt failed to push duplicate TX to the database: %s", err)
 					log.Error(errmsg)
 				}
 			}
@@ -187,7 +226,7 @@ func SendLogNewBlock(hash common.Hash, number uint64, p *peer, timeString string
 	bhash := hash.Hex()
 	if ipErr == nil {
 		debugOutput := fmt.Sprintf(
-			"flashboys2 new block seen my ip: %s time: %s | %s | Peer Name: %s | IP: %s | Port: %s | Hash %s | Block Number %d",
+			"relyt new block seen my ip: %s time: %s | %s | Peer Name: %s | IP: %s | Port: %s | Hash %s | Block Number %d",
 			myIP, timeString, peerString, peerNameString, ipStringSplit, ipPort, bhash, number)
 		log.Info(debugOutput)
 
@@ -196,7 +235,7 @@ func SendLogNewBlock(hash common.Hash, number uint64, p *peer, timeString string
 		_, err := ArbDB.Exec(dbQuery,
 			myIP, timeString, bhash)
 		if err != nil {
-			errmsg := fmt.Sprintf("flashboys2 failed to push data to the database: %s", err)
+			errmsg := fmt.Sprintf("relyt failed to push data to the database: %s", err)
 			log.Error(errmsg)
 		}
 	}

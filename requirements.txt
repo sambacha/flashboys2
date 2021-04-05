@@ -1,0 +1,13 @@
+matplotlib
+pandas
+arrow
+oauth2client
+pandas
+numpy
+aiohttp
+web3
+google-api-python-client
+google-auth-oauthlib
+google-cloud-bigquery
+google-auth-oauthlib
+

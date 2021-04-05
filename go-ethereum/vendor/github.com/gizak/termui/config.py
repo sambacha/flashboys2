@@ -23,18 +23,18 @@ def is_target(fpath):
 
 def update_copyright(fpath):
     print("processing " + fpath)
-    f = io.open(fpath, 'r', encoding='utf-8')
+    f = io.open(fpath, "r", encoding="utf-8")
     fstr = f.read()
     f.close()
 
     # remove old
-    m = re.search('^// Copyright .+?\r?\n\r?\n', fstr, re.MULTILINE|re.DOTALL)
+    m = re.search("^// Copyright .+?\r?\n\r?\n", fstr, re.MULTILINE | re.DOTALL)
     if m:
-        fstr = fstr[m.end():]
+        fstr = fstr[m.end() :]
 
     # add new
     fstr = copyright + fstr
-    f = io.open(fpath, 'w',encoding='utf-8')
+    f = io.open(fpath, "w", encoding="utf-8")
     f.write(fstr)
     f.close()
 
@@ -42,7 +42,8 @@ def update_copyright(fpath):
 def main():
     for d in include_dirs:
         files = [
-            os.path.join(d, f) for f in os.listdir(d)
+            os.path.join(d, f)
+            for f in os.listdir(d)
             if os.path.isfile(os.path.join(d, f))
         ]
         for f in files:
@@ -50,5 +51,5 @@ def main():
                 update_copyright(f)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
